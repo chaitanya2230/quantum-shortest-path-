@@ -5,14 +5,14 @@ from fastapi.responses import FileResponse
 import uvicorn
 from pydantic import BaseModel
 
-from environment.graph_model import CityGraph
-from environment.emergency_api import EmergencyTriggerSystem
-from environment.fleet_manager import FleetManager
-from simulation.traffic_simulator import TrafficSimulator
-from simulation.signal_control import TrafficSignalController
-from intelligence.classical_router import ClassicalRouter
-from intelligence.quantum_router import QuantumRoutingLayer
-from intelligence.explainability import DecisionEngine
+from api.environment.graph_model import CityGraph
+from api.environment.emergency_api import EmergencyTriggerSystem
+from api.environment.fleet_manager import FleetManager
+from api.simulation.traffic_simulator import TrafficSimulator
+from api.simulation.signal_control import TrafficSignalController
+from api.intelligence.classical_router import ClassicalRouter
+from api.intelligence.quantum_router import QuantumRoutingLayer
+from api.intelligence.explainability import DecisionEngine
 
 app = FastAPI(title="Quantum AI Ambulance Local Host API")
 
