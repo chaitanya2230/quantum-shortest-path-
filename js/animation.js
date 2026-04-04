@@ -46,6 +46,14 @@ function animateAmbulance(path) {
             return;
         }
         lastT = ts;
+        
+        // Dynamically decay the UI Live ETA timer based on mathematical track progress
+        const progress = Math.min(1, idx / totalPts);
+        const timerEl = document.getElementById('liveDecayTimer');
+        if (timerEl && typeof window.currentLiveETA !== 'undefined') {
+            const timeRemaining = window.currentLiveETA * (1 - progress);
+            timerEl.innerHTML = `${Math.max(0, timeRemaining).toFixed(1)} <span style="font-size:14px;color:#aaa;font-weight:normal;">min</span>`;
+        }
 
         ambulanceMarker.setLatLng(path[idx]);
 
