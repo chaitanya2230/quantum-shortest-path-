@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quantum Emergency Routing</title>
+    <meta name="description" content="Quantum-optimized emergency ambulance routing with Google Places hospital discovery and real-time traffic-aware routing.">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- Loading Overlay -->
+<div class="overlay" id="overlay">
+    <div class="spinner"></div>
+    <div class="overlay-text" id="overlayText">Initializing Quantum Router...</div>
+</div>
+
+<!-- Top Navigation Bar -->
+<div class="topbar">
+    <div class="brand">
+        <div class="icon">⚛</div>
+        Quantum Emergency Routing
+    </div>
+    <div class="pills">
+        <div class="pill"><span class="dot y" id="gpsDot"></span><span id="gpsText">GPS...</span></div>
+        <div class="pill"><span class="dot y" id="mapDot"></span><span id="mapText">Map</span></div>
+        <div class="pill"><span class="dot y" id="placesDot"></span><span id="placesText">Places</span></div>
+        <div class="pill"><span class="dot y" id="simDot"></span><span id="simText">Ready</span></div>
+    </div>
+</div>
+
+<!-- Map Container (Leaflet) -->
+<div id="map"></div>
+
+<!-- Hidden Google Map for Places API -->
+<div id="gmap-hidden" style="position:absolute;width:1px;height:1px;left:-9999px;top:-9999px"></div>
+
+<!-- Left Panel -->
+<div class="panel">
+    <div class="card">
+        <h3>📍 Your Location (Patient)</h3>
+        <div class="loc-grid">
+            <div class="loc-cell"><div class="lbl">Latitude</div><div class="val" id="uLat">—</div></div>
+            <div class="loc-cell"><div class="lbl">Longitude</div><div class="val" id="uLng">—</div></div>
+            <div class="loc-cell"><div class="lbl">Accuracy</div><div class="val" id="uAcc">—</div></div>
+            <div class="loc-cell"><div class="lbl">Status</div><div class="val" id="uStatus">Waiting...</div></div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>🏥 Nearby Hospitals <span id="hospCount" style="font-size:10px;color:var(--dim);font-weight:400;text-transform:none;letter-spacing:0"></span></h3>
+        <div class="hosp-filters">
+            <button class="hosp-filter-btn active" onclick="filterHospitals('all')">All</button>
+            <button class="hosp-filter-btn" onclick="filterHospitals('open')">🟢 Open</button>
+            <button class="hosp-filter-btn" onclick="filterHospitals('top')">⭐ Top Rated</button>
+            <button class="hosp-filter-btn" onclick="filterHospitals('nearest')">📍 Nearest</button>
+        </div>
+        <div id="hospList" class="hosp-list">
+            <p style="font-size:11px;color:var(--dim)">Searching via OpenStreetMap Data...</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>🚑 Emergency Route Flow</h3>
+        <div class="phase-flow">
+            <div class="phase-node">
+                <div class="phase-icon" style="border-color:var(--success);background:rgba(34,197,94,0.1)">🚑</div>
+                <span>Ambulance</span>
+            </div>
+            <div class="phase-arrow">→</div>
+            <div class="phase-node">
+                <div class="phase-icon" style="border-color:var(--accent);background:rgba(56,189,248,0.1)">👤</div>
+                <span>You</span>
+            </div>
+            <div class="phase-arrow">→</div>
+            <div class="phase-node">
+                <div class="phase-icon" style="border-color:var(--danger);background:rgba(244,63,94,0.1)">🏥</div>
+                <span>Hospital</span>
+            </div>
+        </div>
+        <p style="font-size:11px;color:var(--dim);margin-bottom:10px">
+            Routes use <strong>OSRM API</strong> mapped on <strong>Leaflet</strong>.
+            Select a hospital above, then calculate.
+        </p>
+        <button class="btn btn-main" id="autoDispatchBtn" onclick="callAmbulanceAuto()" style="background:var(--danger); border-color:var(--danger); margin-bottom:8px;">
+            🚨 CALL AMBULANCE NOW (AUTO-TRACK)
+        </button>
+        <button class="btn btn-main" id="calcBtn" onclick="calculateRoutes()" disabled>
+            ⚡ Calculate Routes & Run AI Simulation
+        </button>
+        <button class="btn btn-ghost" style="margin-top:6px" onclick="resetAll()">↺ Reset</button>
+        
+        <!-- Target For Python Backend Data -->
+        <div id="aiPanel" style="display:none; margin-top:15px; padding:10px; background:rgba(192, 132, 252, 0.1); border:1px solid rgba(192, 132, 252, 0.3); border-radius:8px;">
+            <div style="font-size:10px; color:#c084fc; text-transform:uppercase; letter-spacing:1px; margin-bottom:5px; font-weight:700;">🧠 AI Decision Explainer (Connected via Python)</div>
+            <pre id="aiOutput" style="font-size:10px; color:var(--text); white-space:pre-wrap; margin:0; line-height:1.4; font-family:monospace;"></pre>
+        </div>
+    </div>
+
+    <div class="card" id="routesCard" style="display:none">
+        <h3>📊 Route Comparison (Live Traffic)</h3>
+        <div id="routesList"></div>
+        <div class="legend">
+            <div class="legend-item"><div class="legend-line" style="background:#f87171"></div>Normal</div>
+            <div class="legend-item"><div class="legend-line" style="background:#fbbf24"></div>Optimal</div>
+            <div class="legend-item"><div class="legend-line" style="background:#c084fc"></div>Quantum</div>
+            <div class="legend-item"><div class="legend-line" style="background:#22d3ee"></div>Amb→You</div>
+        </div>
+    </div>
+</div>
+
+<!-- Right Stats Panel -->
+<div class="rpanel" id="rpanel" style="display:none">
+    <div class="savings-card">
+        <div class="savings-value" id="savingsVal">—</div>
+        <div class="savings-label">Time Saved (Quantum vs Normal)</div>
+    </div>
+    <div class="card">
+        <h3>⏱ Total Time Comparison</h3>
+        <div id="compareBars"></div>
+    </div>
+    <div class="card">
+        <h3>🗺 Powered By</h3>
+        <p style="font-size:11px;color:var(--dim)">
+            Map: <strong>Leaflet + CartoDB Dark Tiles</strong><br>
+            Hospitals: <strong>OpenStreetMap Overpass API</strong><br>
+            Routing: <strong>OSRM API (Open Routing)</strong><br>
+            Animation: <strong>Smooth ambulance trail</strong>
+        </p>
+    </div>
+</div>
+
+<!-- Map Style Toggle -->
+<div class="map-toggle">
+    <button class="map-btn active" onclick="switchTile('dark')">🌙 Dark</button>
+    <button class="map-btn" onclick="switchTile('satellite')">🛰 Satellite</button>
+    <button class="map-btn" onclick="switchTile('street')">🗺 Street</button>
+</div>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- App Modules -->
+<script src="js/config.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/map.js"></script>
+<script src="js/hospitals.js"></script>
+<script src="js/routing.js"></script>
+<script src="js/animation.js"></script>
+<script src="js/app.js"></script>
+
+<!-- Open Source APIs used for data, Leaflet for UI -->
+<script>
+    document.addEventListener('DOMContentLoaded', initApp);
+</script>
+
+</body>
+</html>
