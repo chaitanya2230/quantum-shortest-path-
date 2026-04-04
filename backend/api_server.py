@@ -99,6 +99,20 @@ def trigger_intelligent_dispatch(req: EmergencyRequest):
         "explainability_report": report
     }
 
+@app.get("/api/dispatch_status/{case_id}")
+def get_dispatch_status(case_id: str):
+    """
+    Endpoint for external tracking (frontend team).
+    Mocked to return static test coordinates since the main map manages real-time state.
+    """
+    return {
+        "case_id": case_id,
+        "ambLat": 17.7110,
+        "ambLng": 83.1660,
+        "eta_minutes": 5.2,
+        "status": "en_route"
+    }
+
 if __name__ == "__main__":
     print("🚀 Quantum Backend API booting on http://0.0.0.0:8001 ...")
     uvicorn.run(app, host="0.0.0.0", port=8001)
