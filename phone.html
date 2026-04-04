@@ -3,130 +3,395 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>SOS Caller App</title>
+    <title>Q-AERS Ambulance Tracking</title>
+    <!-- Fonts & Icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Leaflet Map library -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
     <style>
-        body { margin: 0; padding: 0; background: #000; color: #fff; font-family: -apple-system, system-ui, sans-serif; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-        .header { background: #111; padding: 20px; text-align: center; border-bottom: 1px solid #333; }
-        .header h1 { font-size: 18px; margin: 0; font-weight: 600; color: #fff; }
-        .emergency-container { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
-        
-        .dial-label { font-size: 14px; color: #888; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 10px; }
-        .dial-input { font-size: 64px; text-align: center; background: none; border: none; color: white; width: 100%; font-weight: 300; letter-spacing: 4px; outline: none; margin-bottom: 50px; }
-        
-        .call-btn {
-            width: 140px; height: 140px; border-radius: 50%; border: none;
-            background: linear-gradient(135deg, #22c55e 0%, #15803d 100%);
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            box-shadow: 0 0 30px rgba(34, 197, 94, 0.4);
-            cursor: pointer; position: relative; outline: none; transition: transform 0.1s;
-        }
-        .call-btn:active { transform: scale(0.95); }
-        .call-btn span { font-size: 48px; display: block; margin-top: -5px; } /* telephone emoji size */
-        
-        .status { margin-top: 40px; font-size: 15px; color: #aaa; text-align: center; line-height: 1.5; padding: 0 20px; }
-        .live-pulse { animation: pulse 1.5s infinite; }
-        @keyframes pulse { 0% { box-shadow: 0 0 20px rgba(34, 197, 94, 0.4); } 50% { box-shadow: 0 0 60px rgba(34, 197, 94, 0.8), 0 0 0 20px rgba(34, 197, 94, 0.1); } 100% { box-shadow: 0 0 20px rgba(34, 197, 94, 0.4); } }
+/* BASE VARIABLES & SETUP */
+:root {
+    --bg-color: #f1f3f6;
+    --phone-bg: #e2e8f0; 
+    --text-primary: #1e293b;
+    --text-secondary: #64748b;
+    --primary-blue: #0ea5e9;
+    --primary-blue-hover: #0284c7;
+    --danger-red: #ea1b24;
+    --danger-red-hover: #b91c1c;
+    --card-bg: #ffffff;
+    --border-color: #e2e8f0;
+    --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
+    --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05);
+    
+    --transition-normal: 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-primary);
+    display: flex; justify-content: center; align-items: center;
+    min-height: 100vh; overflow: hidden;
+}
+
+.app-wrapper {
+    position: relative; width: 390px; height: 844px; max-height: 100vh;
+    border-radius: 40px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+    overflow: hidden; display: flex; flex-direction: column;
+    border: 8px solid #cbd5e1; background: var(--phone-bg);
+}
+
+@media (max-width: 480px) {
+    .app-wrapper { width: 100%; height: 100vh; border-radius: 0; border: none; }
+}
+
+.phone-container { height: 100%; width: 100%; position: relative; display: flex; }
+
+#map.full-map { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+
+.custom-icon { border-radius: 50%; display: flex; justify-content: center; align-items: center; color: white; box-shadow: 0 6px 16px rgba(0,0,0,0.3); border: 3px solid white; }
+.user-icon { background-color: var(--primary-blue); font-size: 1.1rem; }
+.amb-icon { background-color: var(--danger-red); font-size: 1.3rem; }
+
+.map-overlay-header {
+    position: absolute; top: 0; left: 0; width: 100%; z-index: 10;
+    padding: 40px 20px 20px; display: flex; justify-content: space-between; align-items: center;
+    background: linear-gradient(to bottom, rgba(255,255,255,0.95), transparent); pointer-events: none;
+}
+.menu-btn, .profile-btn {
+    width: 44px; height: 44px; background: white; border-radius: 50%;
+    display: flex; justify-content: center; align-items: center;
+    box-shadow: var(--shadow-md); font-size: 1.1rem; cursor: pointer; pointer-events: auto;
+}
+.brand-pill { background: var(--text-primary); color: white; padding: 8px 16px; border-radius: 20px; font-weight: 700; font-size: 0.9rem; pointer-events: auto; }
+
+.bottom-sheet {
+    position: absolute; bottom: 0; left: 0; width: 100%;
+    background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(20px);
+    z-index: 10; border-radius: 32px 32px 0 0; box-shadow: 0 -10px 40px rgba(0,0,0,0.15);
+    padding: 32px 24px 24px; transition: var(--transition-normal); display: flex; flex-direction: column;
+}
+.bottom-sheet::before {
+    content: ""; position: absolute; top: 12px; left: 50%;
+    transform: translateX(-50%); width: 40px; height: 5px; background: #cbd5e1; border-radius: 10px;
+}
+.sheet-state { display: none; flex-direction: column; animation: fadeIn 0.4s ease forwards; }
+.sheet-state.active { display: flex; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+.sheet-title { font-size: 1.4rem; font-weight: 700; margin-bottom: 8px; text-align: center; }
+.sheet-sub { text-align: center; color: var(--text-secondary); font-size: 0.95rem; line-height: 1.4; margin-bottom: 30px; }
+
+.sos-btn-modern {
+    background: linear-gradient(135deg, var(--danger-red), #ff4b2b); color: white;
+    border: none; border-radius: 20px; padding: 20px; margin-bottom: 24px;
+    cursor: pointer; position: relative; overflow: hidden;
+    box-shadow: 0 10px 25px rgba(234, 27, 36, 0.35); transition: transform 0.2s;
+}
+.sos-btn-modern:active { transform: scale(0.96); }
+.sos-content { display: flex; justify-content: center; align-items: center; gap: 12px; font-size: 1.5rem; font-weight: 800; letter-spacing: 1px; }
+
+.pulse-animation { animation: pulseBig 2.5s infinite; }
+@keyframes pulseBig {
+    0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(234, 27, 36, 0.6); }
+    50% { transform: scale(1.02); box-shadow: 0 0 0 15px rgba(234, 27, 36, 0); }
+    100% { transform: scale(1); }
+}
+.sec-info { display: flex; align-items: center; justify-content: center; gap: 8px; color: #10b981; font-weight: 600; font-size: 0.85rem;}
+
+.loader-container { display: flex; flex-direction: column; align-items: center; padding: 20px 0 40px; }
+.spinner {
+    width: 60px; height: 60px; border: 5px solid #e2e8f0; border-top-color: var(--danger-red);
+    border-radius: 50%; animation: spin 1s infinite; margin-bottom: 24px;
+}
+@keyframes spin { 100% { transform: rotate(360deg); } }
+.loader-title { font-size: 1.2rem; font-weight: 700; margin-bottom: 8px; }
+.loader-sub { color: var(--text-secondary); font-size: 0.95rem; }
+
+.status-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.status-title { font-size: 1.15rem; font-weight: 700; color: #22c55e;}
+.pill-badge { background: #fee2e2; color: var(--danger-red); padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; animation: blink 2s infinite; }
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+.eta-container { text-align: center; margin-bottom: 24px; }
+.eta-large { font-size: 3.2rem; font-weight: 800; color: var(--primary-blue); line-height: 1; margin-bottom: 6px; font-variant-numeric: tabular-nums; }
+.eta-label { color: var(--text-secondary); font-size: 0.95rem; font-weight: 500; }
+
+.amb-card { background: #f8fafc; border: 1px solid var(--border-color); border-radius: 16px; padding: 16px; display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
+.amb-icon-wrap { width: 48px; height: 48px; background: #ffe4e6; color: var(--danger-red); border-radius: 12px; display: flex; justify-content: center; align-items: center; font-size: 1.4rem; }
+.amb-details { flex: 1; }
+.amb-id { font-size: 0.95rem; margin-bottom: 4px; font-weight: 700;}
+.amb-plate { font-size: 0.85rem; color: var(--text-secondary); }
+.icon-circle { width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--border-color); display: flex; justify-content: center; align-items: center; color: var(--text-primary); cursor: pointer; }
+
+.divider { border: none; border-top: 1px solid var(--border-color); margin: 0 -24px 20px; }
+.first-aid-panel h3 { color: var(--danger-red); font-size: 1.05rem; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+.first-aid-steps { list-style: none; }
+.first-aid-steps li { font-size: 0.9rem; margin-bottom: 10px; display: flex; align-items: center; gap: 10px; font-weight: 500; }
+.first-aid-steps li i.fa-check { color: #10b981; }
+.first-aid-steps li.danger-text { color: var(--danger-red); font-weight: 600; }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>Mobile Phone Simulation</h1>
-    </div>
-    
-    <div class="emergency-container">
-        <!-- Number Dialer -->
-        <div class="dial-label">Medical Emergency</div>
-        <input type="tel" id="dialNumber" value="108" class="dial-input" />
-        
-        <button class="call-btn" id="sosBtn" onclick="triggerSOS()">
-            <span>📞</span>
-        </button>
-        <div class="status" id="statusText">Tap to call. The call will automatically piggy-back your live GPS data to the dispatcher dashboard.</div>
+    <div class="app-wrapper">
+        <main class="phone-container active">
+            
+            <div id="map" class="full-map"></div>
+
+            <header class="map-overlay-header">
+                <div class="menu-btn"><i class="fa-solid fa-bars"></i></div>
+                <div class="brand-pill">Q-AERS</div>
+                <div class="profile-btn"><i class="fa-solid fa-user"></i></div>
+            </header>
+
+            <div class="bottom-sheet" id="bottom-sheet">
+                
+                <div class="sheet-state active" id="state-idle">
+                    <h2 class="sheet-title">Emergency Assistance</h2>
+                    <p class="sheet-sub">Tap the button below to immediately dispatch the nearest available ambulance to your exact location.</p>
+                    
+                    <button class="sos-btn-modern pulse-animation" onclick="triggerDispatch()">
+                        <div class="sos-content">
+                            <span class="sos-text">CALL SOS</span>
+                            <i class="fa-solid fa-truck-medical"></i>
+                        </div>
+                    </button>
+                    
+                    <div class="sec-info">
+                        <i class="fa-solid fa-shield-halved"></i>
+                        <span>Quantum-Assisted Routing Active</span>
+                    </div>
+                </div>
+
+                <div class="sheet-state" id="state-locating">
+                    <div class="loader-container">
+                        <div class="spinner"></div>
+                        <h3 class="loader-title" id="loader-title-text">Fetching optimal route...</h3>
+                        <p class="loader-sub">Connecting to Q-AERS Emergency Servers</p>
+                    </div>
+                </div>
+
+                <div class="sheet-state" id="state-tracking">
+                    <div class="status-header">
+                        <h2 class="status-title">🚑 Ambulance Dispatched!</h2>
+                        <div class="pill-badge">Live</div>
+                    </div>
+                    
+                    <div class="eta-container">
+                        <div class="eta-large" id="eta-display">-- min</div>
+                        <div class="eta-label">Estimated Arrival via Optimized Route</div>
+                    </div>
+                    
+                    <div class="amb-card">
+                        <div class="amb-icon-wrap"><i class="fa-solid fa-truck-medical"></i></div>
+                        <div class="amb-details">
+                            <div class="amb-id"><strong id="amb-id-display">AMB-03</strong> • ALS Equipped</div>
+                            <div class="amb-plate">Driver: Rajesh / WB-02 1234</div>
+                        </div>
+                        <div class="amb-contact">
+                            <button class="icon-circle"><i class="fa-solid fa-phone"></i></button>
+                        </div>
+                    </div>
+                    
+                    <hr class="divider">
+                    
+                    <div class="first-aid-panel">
+                        <h3><i class="fa-solid fa-kit-medical"></i> First Aid Checklist</h3>
+                        <ul class="first-aid-steps">
+                            <li><i class="fa-solid fa-check"></i> Stay calm and clear the pathway</li>
+                            <li><i class="fa-solid fa-check"></i> Monitor patient breathing</li>
+                            <li class="danger-text"><i class="fa-solid fa-ban"></i> Do NOT move the patient</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </main>
     </div>
 
+    <!-- MAP LOGIC & SOS TRIGGER INTEGRATION -->
     <script>
-        // Lock the simulated proxy coordinates once per session so the map doesn't bounce if tapped multiple times
+        let map;
+        let userMarker, ambMarker;
+        
+        // Simulating Visakhapatnam GPS for presentation fallback
         const lockedSimLat = 17.7104 + (Math.random() * 0.02 - 0.01);
         const lockedSimLng = 83.1657 + (Math.random() * 0.02 - 0.01);
+        
         let isDispatching = false;
 
-        async function triggerSOS() {
+        document.addEventListener("DOMContentLoaded", () => {
+            map = L.map('map', { zoomControl: false }).setView([17.6868, 83.2185], 11);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap', maxZoom: 19
+            }).addTo(map);
+        });
+
+        function switchState(stateId) {
+            document.querySelectorAll('.sheet-state').forEach(el => el.classList.remove('active'));
+            document.getElementById(stateId).classList.add('active');
+        }
+
+        async function triggerDispatch() {
             if (isDispatching) return;
             isDispatching = true;
             
-            const btn = document.getElementById('sosBtn');
-            const statusBox = document.getElementById('statusText');
-            const numDialed = document.getElementById('dialNumber').value;
+            switchState('state-locating');
             
-            btn.classList.add('live-pulse');
-            statusBox.innerHTML = '<span style="color:#38bdf8">Dialing ' + numDialed + ' & Locating GPS...</span>';
-            
-            // Pass the number back to the API safely
+            // Generate API payload for laptop dashboard
             const apiPayload = (lat, lng) => JSON.stringify({ 
                 userLat: lat, userLng: lng, 
-                hospitalLat: lat, hospitalLng: lng // Dummy data to fill expected API
+                hospitalLat: lat, hospitalLng: lng 
             });
-            
-            if ("geolocation" in navigator) {
-                navigator.geolocation.getCurrentPosition(async (pos) => {
-                    const lat = pos.coords.latitude;
-                    const lng = pos.coords.longitude;
-                    
-                    statusBox.innerHTML = `<span style="color:#fbbf24">In Call with Dispatch... Transmitting Location (${lat.toFixed(4)}, ${lng.toFixed(4)})</span>`;
-                    
-                    try {
-                        const currentIP = window.location.hostname;
-                        const backendURL = 'http://' + currentIP + ':8001/api/sos_trigger';
 
-                        const res = await fetch(backendURL, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: apiPayload(lat, lng)
-                        });
-                        
-                        if (res.ok) {
-                            statusBox.innerHTML = '<strong style="color:#22c55e">✓ Call Connected.</strong><br/>Dispatch has your precise location. Ambulance deployed.';
-                            btn.style.background = "#059669";
-                            btn.style.boxShadow = "none";
-                            btn.classList.remove('live-pulse');
-                        } else { throw new Error('API Reject'); }
-                    } catch (e) {
-                        statusBox.innerHTML = '<span style="color:#ef4444">Call Failed. Ensure PC backend is running.</span>';
-                        btn.classList.remove('live-pulse');
-                        isDispatching = false;
-                    }
-                    
-                }, async (error) => {
-                    // Fallback simulation for HTTP networks
-                    statusBox.innerHTML = '<span style="color:#fbbf24">HTTP Secured GPS Blocked. Tracking via Cellular Triangulation...</span>';
-                    
-                    setTimeout(async () => {
-                        try {
-                            const currentIP = window.location.hostname;
-                            const backendURL = 'http://' + currentIP + ':8001/api/sos_trigger';
-                            const res = await fetch(backendURL, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: apiPayload(lockedSimLat, lockedSimLng)
-                            });
-                            
-                            if (res.ok) {
-                                statusBox.innerHTML = '<strong style="color:#22c55e">✓ Call Connected (Triangulated).</strong><br/>Dispatch intercepted your signal. Look at your PC screen!';
-                                btn.style.background = "#059669";
-                                btn.style.boxShadow = "none";
-                                btn.classList.remove('live-pulse');
-                            } else { throw new Error('API Reject'); }
-                        } catch (e) {
-                            statusBox.innerHTML = '<span style="color:#ef4444">Cellular Simulation Failed. Ensure `python api_server.py` is running on PC.</span>';
-                            btn.classList.remove('live-pulse');
-                            isDispatching = false;
-                        }
-                    }, 1500);
-                });
+            if ("geolocation" in navigator) {
+                navigator.geolocation.getCurrentPosition(
+                    async (pos) => { handleValidDispatch(pos.coords.latitude, pos.coords.longitude, apiPayload); },
+                    async (error) => {
+                        document.getElementById('loader-title-text').innerText = "Triangulating Fallback...";
+                        handleValidDispatch(lockedSimLat, lockedSimLng, apiPayload);
+                    },
+                    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+                );
             } else {
-                statusBox.textContent = 'Geolocation not supported by this browser.';
-                isDispatching = false;
+                handleValidDispatch(lockedSimLat, lockedSimLng, apiPayload);
             }
+        }
+
+        async function handleValidDispatch(lat, lng, apiPayload) {
+            // Draw Patient pin on phone map
+            const userHtml = '<div class="custom-icon user-icon"><i class="fa-solid fa-person"></i></div>';
+            userMarker = L.marker([lat, lng], {
+                icon: L.divIcon({ html: userHtml, className: '', iconSize: [36, 36], iconAnchor: [18, 18] })
+            }).addTo(map);
+            
+            map.flyTo([lat, lng], 14);
+
+            try {
+                // Post perfectly formatted GPS coordinates to the Laptop Dispatch Dashboard (untouched trigger)
+                const currentIP = window.location.hostname;
+                const backendURL = 'http://' + currentIP + ':8001/api/sos_trigger';
+                
+                await fetch(backendURL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: apiPayload(lat, lng)
+                });
+                
+                setTimeout(() => { startTrackingSimulation(lat, lng); }, 1500);
+
+            } catch (error) {
+                // Network Error Fallback for Hackathon testing
+                setTimeout(() => { startTrackingSimulation(lat, lng); }, 1500);
+            }
+        }
+
+        async function startTrackingSimulation(uLat, uLng) {
+            switchState('state-tracking');
+            
+            // Set base target
+            let ambLat = uLat + 0.012;
+            let ambLng = uLng - 0.005;
+
+            // Fetch Real Hospitals around the user 
+            try {
+                const overpassUrl = `https://overpass-api.de/api/interpreter?data=[out:json];node(around:5000,${uLat},${uLng})["amenity"="hospital"];out;`;
+                const res = await fetch(overpassUrl);
+                const data = await res.json();
+                
+                if (data.elements && data.elements.length > 0) {
+                    const hospHtml = '<div style="font-size:16px;text-shadow:0 0 4px #000;filter:drop-shadow(0 0 3px rgba(255,255,255,0.7))">🏥</div>';
+                    const hospitals = data.elements.map(e => ({
+                        lat: e.lat, lng: e.lon, name: e.tags.name || 'Hospital'
+                    }));
+                    
+                    // Disperse hospital pins on mobile map!
+                    hospitals.forEach(h => {
+                        L.marker([h.lat, h.lng], {
+                            icon: L.divIcon({ html: hospHtml, className: '', iconSize: [20, 20] })
+                        }).addTo(map);
+                    });
+
+                    // Mathematically find true shortest radial distance for exact sync with dashboard
+                    let sortedHospitals = hospitals.sort((a, b) => {
+                        let distA = Math.pow(a.lat - uLat, 2) + Math.pow(a.lng - uLng, 2);
+                        let distB = Math.pow(b.lat - uLat, 2) + Math.pow(b.lng - uLng, 2);
+                        return distA - distB;
+                    });
+                    
+                    ambLat = sortedHospitals[0].lat;
+                    ambLng = sortedHospitals[0].lng;
+                }
+            } catch(e) {
+                console.error("Overpass OSMap API failed", e);
+            }
+            
+            const ambHtml = '<div class="custom-icon amb-icon"><i class="fa-solid fa-truck-medical"></i></div>';
+            ambMarker = L.marker([ambLat, ambLng], {
+                icon: L.divIcon({ html: ambHtml, className: '', iconSize: [42, 42], iconAnchor: [21, 21], zIndexOffset: 1000 })
+            }).addTo(map);
+
+            // Establish Sync Socket to exact backend geometry array
+            pollForActiveDispatch(uLat, uLng, ambLat, ambLng);
+        }
+
+        async function pollForActiveDispatch(uLat, uLng, fallbackAmbLat, fallbackAmbLng) {
+            const currentIP = window.location.hostname;
+            const backendURL = 'http://' + currentIP + ':8001/api/active_dispatch';
+            
+            const interval = setInterval(async () => {
+                try {
+                    const res = await fetch(backendURL);
+                    const data = await res.json();
+                    
+                    if (data.active && data.path && data.path.length > 0) {
+                        clearInterval(interval);
+                        
+                        // Exact match visual rendering of the Purple Quantum Route locally computed on dashboard!
+                        L.polyline(data.path, { color: '#c084fc', weight: 7, opacity: 1.0 }).addTo(map);
+                        
+                        // Center camera perfectly
+                        const bounds = L.latLngBounds([[fallbackAmbLat, fallbackAmbLng], [uLat, uLng]]);
+                        map.fitBounds(bounds, { padding: [60, 60] });
+
+                        // Sync True Decaying Time exactly
+                        startETACountdown(data.eta);
+                    }
+                } catch(e) {
+                    // console.error("Waiting for backend sync...");
+                }
+            }, 1000);
+        }
+
+        function startETACountdown(minutes) {
+            let remain = minutes;
+            const etaEl = document.getElementById('eta-display');
+            
+            etaEl.innerText = remain.toFixed(1) + " min";
+            
+            const interval = setInterval(() => {
+                remain -= (1.0 / 60.0); // True real wall-clock physical decay (1 second = 1/60th of a minute)
+                
+                if (remain <= 1.0) {
+                    etaEl.classList.add('critical-time');
+                }
+                
+                if (remain <= 0) {
+                    clearInterval(interval);
+                    etaEl.innerText = "ARRIVING";
+                    etaEl.style.fontSize = "2.4rem";
+                } else {
+                    etaEl.innerText = remain.toFixed(1) + " min";
+                }
+            }, 1000); // Trigger every exactly 1000ms (1 second)
         }
     </script>
 </body>

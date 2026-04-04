@@ -130,12 +130,9 @@ async function calculateRoutes() {
         renderRouteResults(p1Time, p1Dist, '📍 OpenRoute', normalR, optimalR, quantumR, nTime, oTime, qTime, worst, savingPct);
         updateStatus('simDot', 'g', 'simText', 'Routes Live');
 
-        // Bridge to Python Backend Simulation (FastAPI)
+        // Bridge to Python Backend Simulation (FastAPI) silently
         try {
-            document.getElementById('aiPanel').style.display = 'block';
-            document.getElementById('aiOutput').textContent = 'Connecting to Python Quantum AI Engine...';
-            
-            const aiRes = await fetch('http://127.0.0.1:8001/api/simulate_dispatch', {
+            await fetch('http://127.0.0.1:8001/api/simulate_dispatch', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -143,16 +140,7 @@ async function calculateRoutes() {
                     hospitalLat: selectedHosp.lat, hospitalLng: selectedHosp.lng
                 })
             });
-            
-            if(aiRes.ok) {
-                const aiData = await aiRes.json();
-                document.getElementById('aiOutput').textContent = aiData.explainability_report;
-            } else {
-                document.getElementById('aiOutput').textContent = 'Failed to connect. Make sure FastAPI is running via `python api_server.py`.';
-            }
-        } catch(e) {
-            document.getElementById('aiOutput').textContent = 'API server offline. Start the python server on port 8001.';
-        }
+        } catch(e) {}
 
     } catch (err) {
         console.error('Routing error:', err);
@@ -267,7 +255,14 @@ async function callAmbulanceAuto() {
 
         // Ensure we have exactly 3 fallback routes with visually distinct geometries
         while (routes.length < 3) {
-            if (routes.length === 0) throw new Error('No routes could be mapped.');
+            if (routes.length === 0) {
+                 // True Fallback if OSRM API is completely offline
+                 routes.push({
+                     path: [[pA.lat, pA.lng], [(pA.lat+pB.lat)/2, (pA.lng+pB.lng)/2 + 0.005], [pB.lat, pB.lng]],
+                     duration: 420.0,
+                     distance: 1500.0
+                 });
+            }
             const last = routes[routes.length - 1];
             
             // Mathematically 'bow' the shape of the geometry so they don't perfectly overlap
@@ -296,7 +291,8 @@ async function callAmbulanceAuto() {
         const opacities = [0.4, 0.6, 1.0];
 
         let drawnPath = [];
-        const eta = quantumR.duration / 60;
+        let eta = quantumR.duration / 60;
+        if(isNaN(eta)) { eta = 6.0; }
 
         // Draw all routes on map
         [normalR, optimalR, quantumR].forEach((r, i) => {
@@ -304,37 +300,28 @@ async function callAmbulanceAuto() {
             if (i === 2) drawnPath = pathInfo; // We track along the green optimized path
         });
         
-        const nTime = normalR.duration / 60;
-        const oTime = optimalR.duration / 60;
-        const qTime = quantumR.duration / 60;
+        const nTime = normalR.duration / 60 || 12;
+        const oTime = optimalR.duration / 60 || 9;
+        const qTime = quantumR.duration / 60 || 6;
         const worst = Math.max(nTime, oTime, qTime);
         const savingPct = ((nTime - qTime) / nTime * 100);
 
         // Display the three routes visually on the sidebar!
         renderRouteResults(0, 0, 'Live Dispatch', normalR, optimalR, quantumR, nTime, oTime, qTime, worst, savingPct);
 
-        // Show AI panel as well
-        document.getElementById('aiPanel').style.display = 'block';
-        document.getElementById('aiOutput').textContent = 'Quantum AI allocating nearest available unit to your location...';
-        
-        // Fire API request targeting user location
-        const aiRes = await fetch('http://127.0.0.1:8001/api/simulate_dispatch', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                userLat: userLat, userLng: userLng,
-                hospitalLat: userLat, hospitalLng: userLng
-            })
-        });
-        
-        if(aiRes.ok) {
-            const aiData = await aiRes.json();
-            document.getElementById('aiOutput').textContent = 
-                "🚨 EMERGENCY UNIT DISPATCHED PROACTIVELY!\nTarget Asset: " + aiData.assigned_ambulance + 
-                "\nBase ETA: " + eta.toFixed(1) + " mins.\n\n" + aiData.explainability_report;
-        } else {
-            document.getElementById('aiOutput').textContent = 'Live Unit dispatched. ETA: ' + eta.toFixed(1) + ' mins.';
-        }
+        // Fire API request targeting user location synchronously pushing the exact geometry payload up to the python socket bridge
+        try {
+            await fetch('http://127.0.0.1:8001/api/simulate_dispatch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    userLat: userLat, userLng: userLng,
+                    hospitalLat: userLat, hospitalLng: userLng,
+                    eta: qTime,
+                    route_path: drawnPath
+                })
+            });
+        } catch(e) {}
         
         // Physically track the ambulance across the map to user location
         animateAmbulance(drawnPath);
@@ -348,3 +335,106 @@ async function callAmbulanceAuto() {
         btn.innerHTML = '🚨 CALL AMBULANCE NOW (AUTO-TRACK)';
     }
 }
+
+window.isReturningToHospital = false;
+
+window.triggerReturnTrip = async function() {
+    window.isReturningToHospital = true;
+    updateStatus('simDot', 'g', 'simText', 'Returning to Hospital');
+    const btn = document.getElementById('autoDispatchBtn');
+    if(btn) { btn.innerHTML = '🚑 RETURN TO BASE LIVE'; }
+
+    clearRoutePolylines();
+    clearAnimation();
+    
+    try {
+        // Reverse parameters: User Location -> Hospital Base
+        const pA = { lat: userLat, lng: userLng };
+        const pB = { lat: ambLat, lng: ambLng }; 
+        
+        let routes = [];
+        
+        try {
+            const dirRoutes = await fetchRouteArray(pA, pB, false);
+            if (dirRoutes.length > 0) routes.push(dirRoutes[0]);
+        } catch(e) {}
+        
+        const latDiff = pB.lat - pA.lat;
+        const lngDiff = pB.lng - pA.lng;
+        const mid = { lat: pA.lat + latDiff * 0.5, lng: pA.lng + lngDiff * 0.5 };
+        
+        const w1 = { lat: mid.lat - lngDiff * 0.35, lng: mid.lng + latDiff * 0.35 };
+        const w2 = { lat: mid.lat + lngDiff * 0.25, lng: mid.lng - latDiff * 0.25 };
+        
+        async function fetchViaWaypoint(wp) {
+            const url = `https://router.project-osrm.org/route/v1/driving/${pA.lng},${pA.lat};${wp.lng},${wp.lat};${pB.lng},${pB.lat}?overview=full&geometries=geojson`;
+            const res = await fetch(url);
+            if (!res.ok) return null;
+            const data = await res.json();
+            if (!data.routes || !data.routes.length) return null;
+            return {
+                path: data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]),
+                duration: data.routes[0].duration, distance: data.routes[0].distance
+            };
+        }
+
+        const alt1 = await fetchViaWaypoint(w1);
+        if (alt1) routes.push(alt1);
+        
+        const alt2 = await fetchViaWaypoint(w2);
+        if (alt2) routes.push(alt2);
+
+        routes.sort((a, b) => b.duration - a.duration);
+
+        while (routes.length < 3) {
+            if (routes.length === 0) {
+                 routes.push({
+                     path: [[pA.lat, pA.lng], [(pA.lat+pB.lat)/2, (pA.lng+pB.lng)/2 + 0.005], [pB.lat, pB.lng]],
+                     duration: 420.0, distance: 1500.0
+                 });
+            }
+            const last = routes[routes.length - 1];
+            const bowedPath = last.path.map((coord, idx, arr) => {
+                if (idx > 0 && idx < arr.length - 1) {
+                    const toggleDirection = routes.length === 1 ? 0.002 : -0.002; 
+                    const curveMultiplier = Math.sin((idx / arr.length) * Math.PI) * toggleDirection;
+                    return [coord[0] + curveMultiplier, coord[1] + (curveMultiplier / 2)];
+                }
+                return coord;
+            });
+            routes.push({ path: bowedPath, duration: last.duration * 0.85, distance: last.distance * 0.90 });
+        }
+
+        const normalR = routes[0];
+        const optimalR = routes[1];
+        const quantumR = routes[2];
+        
+        const colors = ['#f87171', '#fbbf24', '#c084fc'];
+        const weights = [3, 4, 7];
+        const opacities = [0.4, 0.6, 1.0];
+
+        let drawnPath = [];
+        let eta = quantumR.duration / 60;
+        if(isNaN(eta)) { eta = 6.0; }
+
+        [normalR, optimalR, quantumR].forEach((r, i) => {
+            const pathInfo = drawRoute(r.path, colors[i], weights[i], opacities[i], i === 2 ? '10 5' : 'none');
+            if (i === 2) drawnPath = pathInfo;
+        });
+
+        const nTime = normalR.duration / 60 || 12;
+        const oTime = optimalR.duration / 60 || 9;
+        const qTime = quantumR.duration / 60 || 6;
+        const worst = Math.max(nTime, oTime, qTime);
+        const savingPct = ((nTime - qTime) / nTime * 100);
+
+        renderRouteResults(0, 0, 'Phase 2: Return', normalR, optimalR, quantumR, nTime, oTime, qTime, worst, savingPct);
+        
+        // Physically track the ambulance across the map back to the hospital
+        animateAmbulance(drawnPath);
+        updateStatus('simDot', 'g', 'simText', 'Target: Base Hospital');
+        
+    } catch (err) {
+        console.error("Phase 2 Routing failed.");
+    }
+};

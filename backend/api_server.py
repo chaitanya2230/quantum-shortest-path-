@@ -37,6 +37,14 @@ class EmergencyRequest(BaseModel):
     userLng: float
     hospitalLat: float
     hospitalLng: float
+    route_path: list = []
+    eta: float = 0.0
+
+active_dispatch_state = {
+    "active": False,
+    "path": [],
+    "eta": 0.0
+}
 
 @app.post("/api/sos_trigger")
 def trigger_external_phone_call(req: EmergencyRequest):
@@ -58,10 +66,15 @@ def poll_pending_calls():
 
 @app.post("/api/simulate_dispatch")
 def trigger_intelligent_dispatch(req: EmergencyRequest):
+    # Store exact synced parameters from the dashboard for the phone to consume
+    active_dispatch_state["active"] = True
+    active_dispatch_state["path"] = req.route_path
+    active_dispatch_state["eta"] = req.eta
+
     # 1. Random Spike to make traffic heavy
     traffic_sim.clear_traffic()
     traffic_sim.simulate_random_spikes(num_spikes=15, severity=4.0)
-
+    
     # 2. Trigger the Quantum Logic Routine
     emergency = emergency_system.simulate_emergency_call()
     
@@ -101,10 +114,6 @@ def trigger_intelligent_dispatch(req: EmergencyRequest):
 
 @app.get("/api/dispatch_status/{case_id}")
 def get_dispatch_status(case_id: str):
-    """
-    Endpoint for external tracking (frontend team).
-    Mocked to return static test coordinates since the main map manages real-time state.
-    """
     return {
         "case_id": case_id,
         "ambLat": 17.7110,
@@ -112,6 +121,11 @@ def get_dispatch_status(case_id: str):
         "eta_minutes": 5.2,
         "status": "en_route"
     }
+
+@app.get("/api/active_dispatch")
+def get_active_dispatch():
+    """Endpoint for phone to poll the exact geometry constructed by the dashboard."""
+    return active_dispatch_state
 
 if __name__ == "__main__":
     print("🚀 Quantum Backend API booting on http://0.0.0.0:8001 ...")

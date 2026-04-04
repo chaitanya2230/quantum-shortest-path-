@@ -21,10 +21,18 @@ function animateAmbulance(path) {
 
     const totalPts = path.length;
     const step = Math.max(1, Math.floor(totalPts / CONFIG.MAX_ANIM_STEPS));
-    let idx = 0, lastT = 0, trailCt = 0;
+    let startTime = null;
+    let trailCt = 0;
 
     function tick(ts) {
-        if (idx >= totalPts) {
+        if (!startTime) startTime = ts;
+        const elapsedMs = ts - startTime;
+        
+        // Exact real-world physical time duration mapping
+        const totalDurationMs = (window.currentLiveETA || 6.0) * 60 * 1000;
+        const progress = Math.min(1, elapsedMs / totalDurationMs);
+        
+        if (progress >= 1.0) {
             // Arrival flash!
             ambulanceMarker.setIcon(L.divIcon({
                 html: '<div style="font-size:32px;text-shadow:0 0 20px #22c55e,0 0 40px #22c55e,0 0 60px #22c55e">🚑</div>',
@@ -32,35 +40,46 @@ function animateAmbulance(path) {
                 iconSize: [40, 40],
                 iconAnchor: [20, 20],
             }));
-            // Arrival ring
             const arrivalCircle = L.circle(path[totalPts - 1], {
                 radius: 100, fillColor: '#22c55e', fillOpacity: 0.15,
                 color: '#22c55e', weight: 2, opacity: 0.5,
             }).addTo(leafletMap);
             trailMarkers.push(arrivalCircle);
             setTimeout(() => { try { leafletMap.removeLayer(arrivalCircle); } catch(e){} }, 4000);
+            
+            // Phase 2: Trigger Return Trip automatically!
+            if (window.triggerReturnTrip && !window.isReturningToHospital) {
+                setTimeout(() => window.triggerReturnTrip(), 2000);
+            }
             return;
         }
-        if (ts - lastT < CONFIG.ANIMATION_DELAY) {
-            ambulanceAnimId = requestAnimationFrame(tick);
-            return;
-        }
-        lastT = ts;
         
-        // Dynamically decay the UI Live ETA timer based on mathematical track progress
-        const progress = Math.min(1, idx / totalPts);
+        // Dynamically decay the UI Live ETA timer based on absolute clock time
         const timerEl = document.getElementById('liveDecayTimer');
         if (timerEl && typeof window.currentLiveETA !== 'undefined') {
-            const timeRemaining = window.currentLiveETA * (1 - progress);
+            const timeRemaining = (totalDurationMs - elapsedMs) / 60000; // in minutes
             timerEl.innerHTML = `${Math.max(0, timeRemaining).toFixed(1)} <span style="font-size:14px;color:#aaa;font-weight:normal;">min</span>`;
         }
 
-        ambulanceMarker.setLatLng(path[idx]);
+        // Sub-pixel geographic interpolation for ultra smooth physical real-time driving
+        const fineIdx = progress * (totalPts - 1);
+        const idx1 = Math.floor(fineIdx);
+        const idx2 = Math.min(totalPts - 1, idx1 + 1);
+        const ratio = fineIdx - idx1;
+        
+        const p1 = path[idx1];
+        const p2 = path[idx2];
+        const currentPos = [
+            p1[0] + (p2[0] - p1[0]) * ratio,
+            p1[1] + (p2[1] - p1[1]) * ratio
+        ];
 
-        // Trail dots
+        ambulanceMarker.setLatLng(currentPos);
+
+        // Trail dots every ~50 frames
         trailCt++;
-        if (trailCt % CONFIG.TRAIL_INTERVAL === 0) {
-            const dot = L.circleMarker(path[idx], {
+        if (trailCt % 50 === 0) {
+            const dot = L.circleMarker(currentPos, {
                 radius: 3, fillColor: '#22c55e', fillOpacity: 0.5,
                 stroke: false,
             }).addTo(leafletMap);
@@ -69,7 +88,6 @@ function animateAmbulance(path) {
             setTimeout(() => { try { leafletMap.removeLayer(dot); } catch(e){} }, 6000);
         }
 
-        idx += step;
         ambulanceAnimId = requestAnimationFrame(tick);
     }
 
