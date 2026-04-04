@@ -46,22 +46,35 @@ function startPhoneListener() {
                         isMapLive = true;
                         // Build Map directly at the phone's coordinates!
                         initMap(userLat, userLng);
-                        findHospitals(userLat, userLng);
                     } else {
-                        // Rebase map on subsequent calls
                         userMarker.setLatLng([userLat, userLng]);
                         leafletMap.flyTo([userLat, userLng], 15);
+                    }
+                    
+                    // Fetch authentic hospitals around the new phone zone
+                    await findHospitals(userLat, userLng);
+                    
+                    // Snap the ambulance instantly to the nearest actual hospital!
+                    if (typeof displayedHospitals !== 'undefined' && displayedHospitals.length > 0) {
+                        let sortedHospitals = [...displayedHospitals].sort((a, b) => {
+                            let distA = Math.pow(a.lat - userLat, 2) + Math.pow(a.lng - userLng, 2);
+                            let distB = Math.pow(b.lat - userLat, 2) + Math.pow(b.lng - userLng, 2);
+                            return distA - distB;
+                        });
                         
+                        ambLat = sortedHospitals[0].lat;
+                        ambLng = sortedHospitals[0].lng;
+                        ambMarker.setLatLng([ambLat, ambLng]);
+                    } else {
+                        // Fallback in case OSM fails
                         const angle = Math.random() * Math.PI * 2;
                         ambLat = userLat + 0.012 * Math.cos(angle);
                         ambLng = userLng + 0.012 * Math.sin(angle);
                         ambMarker.setLatLng([ambLat, ambLng]);
-                        
-                        findHospitals(userLat, userLng);
                     }
                     
-                    // Dispatch the unit dynamically to the phone source
-                    setTimeout(() => { callAmbulanceAuto(); }, 1500); 
+                    // Dispatch the unit dynamically after routing snaps to the hospital
+                    setTimeout(() => { callAmbulanceAuto(); }, 500);
                 }
             }
         } catch(e) {
