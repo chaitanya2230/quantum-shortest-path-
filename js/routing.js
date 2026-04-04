@@ -318,7 +318,8 @@ async function callAmbulanceAuto() {
                     userLat: userLat, userLng: userLng,
                     hospitalLat: userLat, hospitalLng: userLng,
                     eta: qTime,
-                    route_path: drawnPath
+                    route_path: drawnPath,
+                    hosp_name: selectedHosp ? selectedHosp.name : "Quantum Base"
                 })
             });
         } catch(e) {}

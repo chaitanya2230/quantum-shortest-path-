@@ -192,13 +192,13 @@ body {
                     </div>
                     
                     <div class="amb-card">
-                        <div class="amb-icon-wrap"><i class="fa-solid fa-truck-medical"></i></div>
+                        <div class="amb-icon-wrap"><i class="fa-solid fa-hospital"></i></div>
                         <div class="amb-details">
-                            <div class="amb-id"><strong id="amb-id-display">AMB-03</strong> • ALS Equipped</div>
-                            <div class="amb-plate">Driver: Rajesh / WB-02 1234</div>
+                            <div class="amb-id"><strong id="hosp-name-display">Triangulating Hospital...</strong></div>
+                            <div class="amb-plate" id="hosp-dist-display">Securing Quantum Corridor</div>
                         </div>
                         <div class="amb-contact">
-                            <button class="icon-circle"><i class="fa-solid fa-phone"></i></button>
+                            <button class="icon-circle"><i class="fa-solid fa-diamond-turn-right"></i></button>
                         </div>
                     </div>
                     
@@ -300,39 +300,6 @@ body {
             // Set base target
             let ambLat = uLat + 0.012;
             let ambLng = uLng - 0.005;
-
-            // Fetch Real Hospitals around the user 
-            try {
-                const overpassUrl = `https://overpass-api.de/api/interpreter?data=[out:json];node(around:5000,${uLat},${uLng})["amenity"="hospital"];out;`;
-                const res = await fetch(overpassUrl);
-                const data = await res.json();
-                
-                if (data.elements && data.elements.length > 0) {
-                    const hospHtml = '<div style="font-size:16px;text-shadow:0 0 4px #000;filter:drop-shadow(0 0 3px rgba(255,255,255,0.7))">🏥</div>';
-                    const hospitals = data.elements.map(e => ({
-                        lat: e.lat, lng: e.lon, name: e.tags.name || 'Hospital'
-                    }));
-                    
-                    // Disperse hospital pins on mobile map!
-                    hospitals.forEach(h => {
-                        L.marker([h.lat, h.lng], {
-                            icon: L.divIcon({ html: hospHtml, className: '', iconSize: [20, 20] })
-                        }).addTo(map);
-                    });
-
-                    // Mathematically find true shortest radial distance for exact sync with dashboard
-                    let sortedHospitals = hospitals.sort((a, b) => {
-                        let distA = Math.pow(a.lat - uLat, 2) + Math.pow(a.lng - uLng, 2);
-                        let distB = Math.pow(b.lat - uLat, 2) + Math.pow(b.lng - uLng, 2);
-                        return distA - distB;
-                    });
-                    
-                    ambLat = sortedHospitals[0].lat;
-                    ambLng = sortedHospitals[0].lng;
-                }
-            } catch(e) {
-                console.error("Overpass OSMap API failed", e);
-            }
             
             const ambHtml = '<div class="custom-icon amb-icon"><i class="fa-solid fa-truck-medical"></i></div>';
             ambMarker = L.marker([ambLat, ambLng], {
@@ -358,17 +325,62 @@ body {
                         // Exact match visual rendering of the Purple Quantum Route locally computed on dashboard!
                         L.polyline(data.path, { color: '#c084fc', weight: 7, opacity: 1.0 }).addTo(map);
                         
+                        // Move ambulance marker strictly to first coordinate from backend payload!
+                        const trueAmbLat = data.path[0][0];
+                        const trueAmbLng = data.path[0][1];
+                        ambMarker.setLatLng([trueAmbLat, trueAmbLng]);
+
                         // Center camera perfectly
-                        const bounds = L.latLngBounds([[fallbackAmbLat, fallbackAmbLng], [uLat, uLng]]);
+                        const bounds = L.latLngBounds([[trueAmbLat, trueAmbLng], [uLat, uLng]]);
                         map.fitBounds(bounds, { padding: [60, 60] });
+
+                        // Sync dynamic descriptive data directly from Dashboard bridge!
+                        document.getElementById('hosp-name-display').innerText = data.hosp_name;
+                        document.getElementById('hosp-dist-display').innerText = "Unit Base: " + data.hosp_name;
 
                         // Sync True Decaying Time exactly
                         startETACountdown(data.eta);
+                        
+                        // Begin True Mathematical Interpolation along Path
+                        animatePhoneAmbulance(data.path, data.eta);
                     }
                 } catch(e) {
                     // console.error("Waiting for backend sync...");
                 }
             }, 1000);
+        }
+
+        function animatePhoneAmbulance(path, etaMinutes) {
+            let startTime = null;
+            const totalPts = path.length;
+            const totalDurationMs = etaMinutes * 60 * 1000;
+            
+            function tick(ts) {
+                if (!startTime) startTime = ts;
+                const elapsedMs = ts - startTime;
+                const progress = Math.min(1, elapsedMs / totalDurationMs);
+                
+                if (progress >= 1.0) {
+                    ambMarker.setLatLng(path[totalPts - 1]);
+                    return;
+                }
+                
+                const fineIdx = progress * (totalPts - 1);
+                const idx1 = Math.floor(fineIdx);
+                const idx2 = Math.min(totalPts - 1, idx1 + 1);
+                const ratio = fineIdx - idx1;
+                
+                const p1 = path[idx1];
+                const p2 = path[idx2];
+                const currentPos = [
+                    p1[0] + (p2[0] - p1[0]) * ratio,
+                    p1[1] + (p2[1] - p1[1]) * ratio
+                ];
+                
+                ambMarker.setLatLng(currentPos);
+                requestAnimationFrame(tick);
+            }
+            requestAnimationFrame(tick);
         }
 
         function startETACountdown(minutes) {

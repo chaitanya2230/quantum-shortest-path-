@@ -65,6 +65,11 @@ function startPhoneListener() {
                         ambLat = sortedHospitals[0].lat;
                         ambLng = sortedHospitals[0].lng;
                         ambMarker.setLatLng([ambLat, ambLng]);
+                        
+                        // Store exactly the metadata so the JSON Socket bridge can send it to the mobile phone
+                        if (typeof selectedHosp !== 'undefined') {
+                            selectedHosp = sortedHospitals[0];
+                        }
                     } else {
                         // Fallback in case OSM fails
                         const angle = Math.random() * Math.PI * 2;
