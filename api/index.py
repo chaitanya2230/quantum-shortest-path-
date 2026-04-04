@@ -1,5 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 import uvicorn
 from pydantic import BaseModel
 
@@ -22,6 +24,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Mount Static Directories for Unified Web Service (Render/Localhost)
+app.mount("/js", StaticFiles(directory="js"), name="js")
+app.mount("/css", StaticFiles(directory="css"), name="css")
+
+@app.get("/")
+def serve_dashboard():
+    return FileResponse("index.html")
+
+@app.get("/phone.html")
+def serve_mobile():
+    return FileResponse("phone.html")
 
 # Keep the simulation state alive in memory
 city = CityGraph(size=8)
