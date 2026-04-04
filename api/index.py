@@ -54,12 +54,14 @@ class EmergencyRequest(BaseModel):
     route_path: list = []
     eta: float = 0.0
     hosp_name: str = "Quantum Dispatch Base"
+    start_time: float = 0.0
 
 active_dispatch_state = {
     "active": False,
     "path": [],
     "eta": 0.0,
-    "hosp_name": "Quantum Dispatch Base"
+    "hosp_name": "Quantum Dispatch Base",
+    "start_time": 0.0
 }
 
 @app.post("/api/sos_trigger")
@@ -87,6 +89,7 @@ def trigger_intelligent_dispatch(req: EmergencyRequest):
     active_dispatch_state["path"] = req.route_path
     active_dispatch_state["eta"] = req.eta
     active_dispatch_state["hosp_name"] = req.hosp_name
+    active_dispatch_state["start_time"] = req.start_time
 
     # 1. Random Spike to make traffic heavy
     traffic_sim.clear_traffic()

@@ -336,11 +336,8 @@ body {
                         document.getElementById('hosp-name-display').innerText = data.hosp_name;
                         document.getElementById('hosp-dist-display').innerText = "Unit Base: " + data.hosp_name;
 
-                        // Sync True Decaying Time exactly
-                        startETACountdown(data.eta);
-                        
-                        // Begin True Mathematical Interpolation along Path
-                        animatePhoneAmbulance(data.path, data.eta);
+                        // Begin True Mathematical Interpolation and Time Decay perfectly synced to Server
+                        animatePhoneAmbulance(data.path, data.eta, data.start_time);
                     }
                 } catch(e) {
                     // console.error("Waiting for backend sync...");
@@ -348,15 +345,27 @@ body {
             }, 1000);
         }
 
-        function animatePhoneAmbulance(path, etaMinutes) {
-            let startTime = null;
+        function animatePhoneAmbulance(path, etaMinutes, serverStartTimeMs) {
             const totalPts = path.length;
             const totalDurationMs = etaMinutes * 60 * 1000;
+            const etaEl = document.getElementById('eta-display');
             
-            function tick(ts) {
-                if (!startTime) startTime = ts;
-                const elapsedMs = ts - startTime;
-                const progress = Math.min(1, elapsedMs / totalDurationMs);
+            function tick() {
+                const ts = Date.now();
+                // Because phones might poll late, we measure purely against the absolute timestamp safely
+                const elapsedMs = ts - serverStartTimeMs;
+                const progress = Math.min(1, Math.max(0, elapsedMs / totalDurationMs));
+                
+                // Live visual timer sync
+                const remainMinutes = (totalDurationMs - elapsedMs) / 60000;
+                
+                if (remainMinutes <= 1.0) etaEl.classList.add('critical-time');
+                if (remainMinutes <= 0) {
+                    etaEl.innerText = "ARRIVING";
+                    etaEl.style.fontSize = "2.4rem";
+                } else {
+                    etaEl.innerText = remainMinutes.toFixed(1) + " min";
+                }
                 
                 if (progress >= 1.0) {
                     ambMarker.setLatLng(path[totalPts - 1]);
@@ -379,29 +388,6 @@ body {
                 requestAnimationFrame(tick);
             }
             requestAnimationFrame(tick);
-        }
-
-        function startETACountdown(minutes) {
-            let remain = minutes;
-            const etaEl = document.getElementById('eta-display');
-            
-            etaEl.innerText = remain.toFixed(1) + " min";
-            
-            const interval = setInterval(() => {
-                remain -= (1.0 / 60.0); // True real wall-clock physical decay (1 second = 1/60th of a minute)
-                
-                if (remain <= 1.0) {
-                    etaEl.classList.add('critical-time');
-                }
-                
-                if (remain <= 0) {
-                    clearInterval(interval);
-                    etaEl.innerText = "ARRIVING";
-                    etaEl.style.fontSize = "2.4rem";
-                } else {
-                    etaEl.innerText = remain.toFixed(1) + " min";
-                }
-            }, 1000); // Trigger every exactly 1000ms (1 second)
         }
     </script>
 </body>

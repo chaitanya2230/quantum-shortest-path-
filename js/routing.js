@@ -309,6 +309,9 @@ async function callAmbulanceAuto() {
         // Display the three routes visually on the sidebar!
         renderRouteResults(0, 0, 'Live Dispatch', normalR, optimalR, quantumR, nTime, oTime, qTime, worst, savingPct);
 
+        // Start global absolute time synchronization
+        window.globalDispatchStartTime = Date.now();
+
         // Fire API request targeting user location synchronously pushing the exact geometry payload up to the python socket bridge
         try {
             await fetch('/api/simulate_dispatch', {
@@ -319,7 +322,8 @@ async function callAmbulanceAuto() {
                     hospitalLat: userLat, hospitalLng: userLng,
                     eta: qTime,
                     route_path: drawnPath,
-                    hosp_name: selectedHosp ? selectedHosp.name : "Quantum Base"
+                    hosp_name: selectedHosp ? selectedHosp.name : "Quantum Base",
+                    start_time: window.globalDispatchStartTime
                 })
             });
         } catch(e) {}

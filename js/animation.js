@@ -25,8 +25,9 @@ function animateAmbulance(path) {
     let trailCt = 0;
 
     function tick(ts) {
-        if (!startTime) startTime = ts;
-        const elapsedMs = ts - startTime;
+        // Because we calculate global sync securely, elapsedMs is directly tied to global timestamp
+        if (typeof window.globalDispatchStartTime === 'undefined') window.globalDispatchStartTime = Date.now();
+        const elapsedMs = Date.now() - window.globalDispatchStartTime;
         
         // Exact real-world physical time duration mapping
         const totalDurationMs = (window.currentLiveETA || 6.0) * 60 * 1000;
