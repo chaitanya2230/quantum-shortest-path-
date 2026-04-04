@@ -311,7 +311,7 @@ async function callAmbulanceAuto() {
 
         // Fire API request targeting user location synchronously pushing the exact geometry payload up to the python socket bridge
         try {
-            await fetch('http://127.0.0.1:8001/api/simulate_dispatch', {
+            await fetch('/api/simulate_dispatch', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

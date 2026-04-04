@@ -277,8 +277,7 @@ body {
 
             try {
                 // Post perfectly formatted GPS coordinates to the Laptop Dispatch Dashboard (untouched trigger)
-                const currentIP = window.location.hostname;
-                const backendURL = 'http://' + currentIP + ':8001/api/sos_trigger';
+                const backendURL = '/api/sos_trigger';
                 
                 await fetch(backendURL, {
                     method: 'POST',
@@ -311,8 +310,7 @@ body {
         }
 
         async function pollForActiveDispatch(uLat, uLng, fallbackAmbLat, fallbackAmbLng) {
-            const currentIP = window.location.hostname;
-            const backendURL = 'http://' + currentIP + ':8001/api/active_dispatch';
+            const backendURL = '/api/active_dispatch';
             
             const interval = setInterval(async () => {
                 try {

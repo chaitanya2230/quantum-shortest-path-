@@ -26,7 +26,7 @@ function startPhoneListener() {
     
     setInterval(async () => {
         try {
-            const res = await fetch('http://127.0.0.1:8001/api/poll_sos');
+            const res = await fetch('/api/poll_sos');
             if (res.ok) {
                 const data = await res.json();
                 if (data.status === "incoming_call") {
